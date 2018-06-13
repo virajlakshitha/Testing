@@ -2,6 +2,9 @@ import React, {Component} from 'react';
 import './header.css';
 
 class App1 extends Component{
+	constructor(props){
+		super(props);
+	}
     render(){
         return(
             <div className="App1">
