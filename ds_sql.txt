@@ -1,0 +1,153 @@
+create type exch_varray as varray(5) of varchar(30)
+/
+
+create type stock_type as object(
+	company varchar(10),
+	current_price number(6,2),
+	exchanges_traded exch_varray,
+	last_dividend number(6,2),
+	earning number(6,2)
+)
+/
+
+create type address_type as object(
+	state_no varchar(5),
+	street_name varchar(20),
+	suburb varchar(20),
+	state varchar(20),
+	pin varchar(5)
+)
+/
+
+create type investment_type as object(
+	company ref stock_type,
+	purchase_price number(6,2),
+	date_ date,
+	qty number
+)
+/
+
+//Currently investment_type is in the row type. But in the investment column we need column type table. To convert it into column type
+create type investment_type_entty as table of investment_type
+/
+
+create type client_type as object(
+	client_no char(3),
+	name varchar(20),
+	address address_type,
+	investment investment_type_entty
+)
+/
+
+create table stock of stock_type(
+	constraint st_pk primary key(company)
+)
+/
+
+create table client of client_type(
+	constraint cl_pk primary key(client_no)
+)nested table investment store as investment_nested
+/
+
+alter table investment_nested 
+add scope for(company) is stock
+/
+
+-------------------------------------------------------------
+
+insert into stock values('BHP',10.50,exch_varray('Sydney','New York'),1.50,3.20)
+/
+
+insert into stock values('IBM',70.00,exch_varray('New York','London','Tokyo'),4.25,10.00)
+/
+
+insert into stock values('INTEL',76.50,exch_varray('New York','London'),5.00,12.40)
+/
+
+insert into stock values('FORD',40.00,exch_varray('New York'),2.00,8.50)
+/
+
+insert into stock values('GM',60.00,exch_varray('New York'),2.50,9.20)
+/
+
+insert into stock values('INFOSYS',45.00,exch_varray('New York'),3.00,7.80)
+/
+
+
+insert into client values('001','John Smith',address_type('3','East Av','Bentley','W A','6001'),investment_type_entty(investment_type((select ref(s) from stock s where s.company='BHP'),12.00,'02-OCT-2001',1000),
+																													  investment_type((select ref(s) from stock s where s.company='BHP'),10.50,'08-JUN-2002',2000),
+																													  investment_type((select ref(s) from stock s where s.company='IBM'),58.00,'12-FEB-2000',500),
+																													  investment_type((select ref(s) from stock s where s.company='IBM'),65.00,'10-APR-2001',1200),
+																													  investment_type((select ref(s) from stock s where s.company='INFOSYS'),64.00,'11-AUG-2001',1000)
+))
+/
+
+insert into client values('002','Jill Brody',address_type('42','Bent st','Perth','W A','6102'),investment_type_entty(investment_type((select ref(s) from stock s where s.company='INTEL'),35.00,'30-JAN-2000',300),
+																													  investment_type((select ref(s) from stock s where s.company='INTEL'),54.00,'30-JAN-2001',400),
+																													  investment_type((select ref(s) from stock s where s.company='INTEL'),60.00,'02-OCT-2001',200),
+																													  investment_type((select ref(s) from stock s where s.company='FORD'),40.00,'05-OCT-1999',300),
+																													  investment_type((select ref(s) from stock s where s.company='GM'),55.00,'12-AUG-2000',500)
+))
+/
+
+----------(a)---------------
+
+select c.name, n.company.company as stock_name, n.company.current_price as price, n.company.last_dividend as last_, n.company.earning as earning
+from client c, table(c.investment) n
+/
+
+----------(b)---------------
+
+select c.name, n.company.company, sum(n.qty) as qty_, sum(n.qty*n.purchase_price)/sum(n.qty) as avg_
+from client c, table(c.investment) n
+group by c.name, n.company.company
+/
+
+-----------(c)--------------
+
+select c.name, n.company.company as stock_, sum(n.qty) as quantity_, sum(n.qty*n.company.current_price) as cprice
+from client c, table(c.investment) n, table(n.company.exchanges_traded) e
+where e.column_value='New York'
+group by c.name, n.company.company
+/
+
+-----------(d)--------------
+
+select c.name, sum(n.purchase_price) as p_price
+from client c, table(c.investment) n
+group by c.name
+/
+
+----------(e)----------------
+
+select c.name, sum(n.qty*(n.company.current_price-n.purchase_price)) as profit
+from client c, table(c.investment) n
+group by c.name
+/
+
+
+
+insert into table(select c.investment
+				from client c
+				where c.name='Jill Brody')
+				select n.company, n.company.current_price, sysdate, n.qty
+				from client c, table(c.investment) n
+				where c.name='John Smith' and n.company.company='INFOSYS'
+/
+delete table(select c.investment
+			from client c
+			where c.name='John Smith') n
+where n.company.company='INFOSYS'
+/
+insert into table(select c.investment
+				from client c
+				where c.name='John Smith')
+				select n.company, n.company.current_price, sysdate, n.qty
+				from client c, table(c.investment) n
+				where c.name='Jill Brody' and n.company.company='GM'
+/
+delete table(select c.investment
+			from client c
+			where c.name='Jill Brody') n
+where n.company.company='GM'
+/
